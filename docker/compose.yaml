@@ -69,7 +69,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
-    _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python requests"
+    _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python requests beautifulsoup4 lxml redis"
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: "/opt/airflow/config/airflow.cfg"
   volumes:
@@ -77,7 +77,8 @@ x-airflow-common: &airflow-common
     - ${AIRFLOW_PROJ_DIR:-.}./airflow/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}./airflow/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}./airflow/plugins:/opt/airflow/plugins
-  user: "${AIRFLOW_UID:-50000}:0"
+    - ${AIRFLOW_PROJ_DIR:-.}./airflow/data:/opt/airflow/data
+  user: "${AIRFLOW_UID:-50000}:0"   
   depends_on: &airflow-common-depends-on
     redis:
       condition: service_healthy
@@ -343,6 +344,7 @@ services:
     ports:
       - "9092:9092"
     environment:
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_ZOOKEEPER_CONNECT: zookeeper_bce:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_exo_bce:9092
@@ -378,6 +380,10 @@ services:
       - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper_bce:2181
     depends_on:
       - kafka
+    networks:
+      - airflow-network
+      - hadoop-network
+      - spark-network
 
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
