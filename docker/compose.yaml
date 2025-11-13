@@ -345,10 +345,9 @@ services:
     environment:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper_bce:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_exo_bce:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CREATE_TOPICS: "weather_stream:1:1,weather_current:1:1,weather_transformed:1:1"
       KAFKA_LOG_RETENTION_BYTES: 1073741824
     depends_on:
       - zookeeper
@@ -362,6 +361,10 @@ services:
     container_name: zookeeper_bce
     ports:
       - "2181:2181"
+    networks:
+      - hadoop-network
+      - spark-network
+      - airflow-network
 
   kafka-ui:
     image: provectuslabs/kafka-ui
@@ -371,8 +374,8 @@ services:
     restart: always
     environment:
       - KAFKA_CLUSTERS_0_NAME=MOAA-Stats
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka_exo:9092
-      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper_exo:2181
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka_exo_bce:9092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper_bce:2181
     depends_on:
       - kafka
 
