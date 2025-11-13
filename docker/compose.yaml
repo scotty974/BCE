@@ -456,11 +456,30 @@ services:
       - hadoop-network
       - spark-network
 
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    restart: always
+    ports:
+      - "7474:7474" # Interface web (browser)
+      - "7687:7687" # Bolt protocol (connexion via drivers)
+    environment:
+      NEO4J_AUTH: neo4j/password # login: neo4j / mdp: password
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/import
+      - neo4j_plugins:/plugins
+
 volumes:
   postgres-db-volume:
   hadoop_namenode:
   hadoop_datanode:
   hadoop_historyserver:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
 
 networks:
   hadoop-network:
