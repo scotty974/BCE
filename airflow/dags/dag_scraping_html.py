@@ -8,7 +8,7 @@ from hdfs import InsecureClient
 # CONFIGURATION
 REDIS_HOST = "redis"
 REDIS_PORT = 6379
-NAMENODE_URL = "http://localhost:9870"
+NAMENODE_URL = "http://namenode_exo_bce:9870"
 BCE_BASE_URL = "https://kbopub.economie.fgov.be"
 
 
@@ -66,7 +66,7 @@ def dag_scraping_html():
         """Scrape une entreprise en utilisant les proxies de Redis"""
         # Créer une nouvelle instance pour cette tâche
         proxy_service = ProxyService(redis_host=REDIS_HOST, redis_port=REDIS_PORT)
-        client = InsecureClient(NAMENODE_URL, user="root")
+        client = InsecureClient("http://namenode_exo_bce:9870", user="root")
 
         entity_number = entreprise["entity_number"]
         max_retries = 30
