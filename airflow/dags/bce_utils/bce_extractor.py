@@ -353,6 +353,7 @@ class BCEDataExtractor:
             extracted_data = self.extract_bce_data(html_content)
             
             # Ajouter des métadonnées
+            from datetime import datetime
             extracted_data['_metadata'] = {
                 'source_file': input_hdfs_path,
                 'extraction_date': datetime.now().isoformat(),
@@ -372,7 +373,7 @@ class BCEDataExtractor:
         except Exception as e:
             self.logger.error(f"Erreur lors du traitement de {input_hdfs_path}: {e}")
             raise
-    
+        
     def process_multiple_files(self, input_hdfs_paths):
         """
         Traite plusieurs fichiers HTML BCE depuis HDFS.
