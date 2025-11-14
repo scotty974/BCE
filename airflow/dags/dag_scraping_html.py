@@ -135,7 +135,7 @@ def dag_scraping_html():
                 html_content = response.text
 
                 # Sauvegarder dans HDFS
-                hdfs_path = f"/hdfs-html-page/{entity_number}/{entity_number}.html"
+                hdfs_path = f"/hdfs-html-page/{entity_number}.html"
                 with client.write(hdfs_path, overwrite=True) as writer:
                     writer.write(html_content.encode("utf-8"))
 
