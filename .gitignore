@@ -1,2 +1,4 @@
 docker/.env
 airflow/logs/
+data
+__pycache__
