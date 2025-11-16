@@ -1,6 +1,5 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
 import logging
 import os
@@ -13,9 +12,9 @@ from bce_utils.bce_extractor import BCEDataExtractor
 from bce_utils.bce_neo4j_loader import BCENeo4jLoader
 
 # Configuration
-HDFS_URL = 'http://namenode_exo_bce:9870'
+HDFS_URL = 'http://namenode_bce:9870'
 HDFS_USER = 'root'
-HDFS_BASE_PATH = '/bce_data'  # Chemin de base dans HDFS où sont les dossiers d'entreprises
+HDFS_BASE_PATH = '/hdfs-html-page'
 NEO4J_URI = 'bolt://neo4j:7687'
 NEO4J_USER = 'neo4j'
 NEO4J_PASSWORD = 'password'
@@ -25,7 +24,7 @@ PROCESSED_FILES_PATH = '/opt/airflow/data/bce_processed_files.txt'
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 1, 1),
+    'start_date': datetime(2023, 1, 1),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -41,6 +40,7 @@ def get_processed_files():
 
 def save_processed_file(hdfs_path):
     """Sauvegarde un fichier comme traité"""
+    os.makedirs(os.path.dirname(PROCESSED_FILES_PATH), exist_ok=True)
     with open(PROCESSED_FILES_PATH, 'a') as f:
         f.write(f"{hdfs_path}\n")
 
@@ -48,7 +48,7 @@ def get_new_html_files(**context):
     """
     Récupère la liste des nouveaux fichiers HTML depuis HDFS
     (fichiers non encore traités)
-    Fichiers au format: /data/{numero_entreprise}.htm
+    Fichiers au format: /hdfs-html-page/{numero_entreprise}.html
     """
     from hdfs import InsecureClient
     
@@ -68,7 +68,7 @@ def get_new_html_files(**context):
         
         for item in all_items:
             # Vérifier si c'est un fichier HTML
-            if item.endswith('.htm') or item.endswith('.html'):
+            if item.endswith('.html') or item.endswith('.htm'):
                 full_path = f"{HDFS_BASE_PATH}/{item}"
                 
                 # Vérifier si le fichier n'a pas déjà été traité
@@ -99,6 +99,8 @@ def extract_bce_data(**context):
     
     if not new_files:
         logger.info("Aucun nouveau fichier à traiter")
+        context['task_instance'].xcom_push(key='json_paths', value=[])
+        context['task_instance'].xcom_push(key='hdfs_paths', value=[])
         return 0
     
     logger.info(f"Extraction de {len(new_files)} fichiers")
@@ -205,36 +207,26 @@ with DAG(
     'dag_bce_to_neo4j',
     default_args=default_args,
     description='Pipeline d\'extraction BCE depuis HDFS vers Neo4j',
-    schedule=None,  # Sera déclenché par un autre DAG
+    schedule=None,  # Déclenché par TriggerDagRunOperator
     catchup=False,
     tags=['bce', 'neo4j', 'hdfs', 'extraction'],
 ) as dag:
-    
-    # Sensor pour attendre la fin d'un autre DAG (à configurer selon votre DAG précédent)
-    # wait_for_previous_dag = ExternalTaskSensor(
-    #     task_id='wait_for_scraping_dag',
-    #     external_dag_id='dag_scraping_html',  # Remplacer par l'ID de votre DAG de scraping
-    #     external_task_id=None,  # None = attendre que tout le DAG soit terminé
-    #     mode='poke',
-    #     timeout=600,
-    #     poke_interval=30,
-    # )
     
     get_files_task = PythonOperator(
         task_id='get_new_files',
         python_callable=get_new_html_files,
     )
-
+    
     extract_task = PythonOperator(
         task_id='extract_data',
         python_callable=extract_bce_data,
     )
-
+    
     load_task = PythonOperator(
         task_id='load_to_neo4j',
         python_callable=load_to_neo4j,
     )
-
+    
     cleanup_task = PythonOperator(
         task_id='cleanup_temp_files',
         python_callable=cleanup_temp_files,
@@ -242,5 +234,4 @@ with DAG(
     )
     
     # Définir l'ordre d'exécution
-    # wait_for_previous_dag >> get_files_task >> extract_task >> load_task >> cleanup_task
     get_files_task >> extract_task >> load_task >> cleanup_task

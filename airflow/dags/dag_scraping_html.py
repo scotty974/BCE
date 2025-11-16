@@ -2,6 +2,7 @@ from datetime import datetime
 
 import requests
 from airflow.decorators import dag, task
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from bce_utils.proxy import ProxyService
 from hdfs import InsecureClient
 
@@ -179,9 +180,19 @@ def dag_scraping_html():
     proxy_init = get_valid_proxies()
 
     # scrape_entreprise dépend de get_valid_proxies
-    scrape_entreprise.partial(proxy_init_result=proxy_init).expand(
+    scraping_tasks = scrape_entreprise.partial(proxy_init_result=proxy_init).expand(
         entreprise=entreprises_test
     )
+    
+    # Déclencher le DAG d'extraction Neo4j après le scraping
+    trigger_neo4j = TriggerDagRunOperator(
+        task_id='trigger_neo4j_dag',
+        trigger_dag_id='dag_bce_to_neo4j',
+        wait_for_completion=False,  # Ne pas attendre la fin du DAG déclenché
+    )
+    
+    # Le trigger se lance après toutes les tâches de scraping
+    scraping_tasks >> trigger_neo4j
 
 
 dag_scraping_html()
