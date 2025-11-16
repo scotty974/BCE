@@ -8,7 +8,7 @@ from hdfs import InsecureClient
 # CONFIGURATION
 REDIS_HOST = "redis"
 REDIS_PORT = 6379
-NAMENODE_URL = "http://localhost:9870"
+NAMENODE_URL = "http://namenode_bce:9870"
 BCE_BASE_URL = "https://kbopub.economie.fgov.be"
 
 
@@ -20,8 +20,8 @@ BCE_BASE_URL = "https://kbopub.economie.fgov.be"
 )
 def dag_scraping_html():
     entreprises_test = [
-        {"entity_number": "0200.065.765", "denomination": "Test Company 1"},
-        {"entity_number": "0200.068.636", "denomination": "Test Company 2"},
+        {"entity_number": "0200.362.408", "denomination": "Test Company 1"},
+        {"entity_number": "0200.420.410", "denomination": "Test Company 2"},
     ]
 
     @task()
@@ -69,7 +69,7 @@ def dag_scraping_html():
         client = InsecureClient(NAMENODE_URL, user="root")
 
         entity_number = entreprise["entity_number"]
-        max_retries = len(proxy_service.proxies)
+        max_retries = 30
 
         print(f"🏢 Scraping entreprise: {entity_number}")
 
@@ -85,6 +85,8 @@ def dag_scraping_html():
                 "entity_number": entity_number,
             }
 
+        print(f"max_retries: {max_retries}")
+        client.makedirs("/hdfs-html-page/")
         for attempt in range(max_retries):
             try:
                 print(f"🔄 Tentative {attempt + 1}/{max_retries}")
@@ -113,13 +115,14 @@ def dag_scraping_html():
 
                 # Faire la requête
                 proxies_dict = proxy_service.get_proxy_dict(proxy)
+                print(f"🌐 URL: {url}")
                 response = requests.get(
                     url,
                     proxies=proxies_dict,
                     timeout=15,
                     headers={"User-Agent": "Mozilla/5.0"},
                 )
-
+                print(f"🌐 Status code: {response.status_code}")
                 # Gérer 404
                 if response.status_code == 404:
                     print(f"⚠️ Entreprise {entity_number} non trouvée (404)")
@@ -133,7 +136,7 @@ def dag_scraping_html():
                 html_content = response.text
 
                 # Sauvegarder dans HDFS
-                hdfs_path = f"/hdfs-html-page/{entity_number}/{entity_number}.html"
+                hdfs_path = f"/hdfs-html-page/{entity_number}.html"
                 with client.write(hdfs_path, overwrite=True) as writer:
                     writer.write(html_content.encode("utf-8"))
 
@@ -166,7 +169,6 @@ def dag_scraping_html():
                     "reason": str(e),
                     "entity_number": entity_number,
                 }
-
         return {
             "status": "failed",
             "reason": "Échec après toutes les tentatives",

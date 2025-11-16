@@ -24,7 +24,7 @@
 # The following variables are supported:
 #
 # AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:3.1.2
+#                                Default: apache/airflow:3.0.6
 # AIRFLOW_UID                  - User ID in Airflow containers
 #                                Default: 50000
 # AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
@@ -48,10 +48,8 @@ x-airflow-common: &airflow-common
   # In order to add custom dependencies or upgrade provider distributions you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.2}
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.0.6}
   # build: .
-  env_file:
-    - ${ENV_FILE_PATH:-.env}
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
@@ -69,7 +67,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
-    _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python requests beautifulsoup4 lxml redis hdfs"
+    _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python requests hdfs neo4j beautifulsoup4 lxml"
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: "/opt/airflow/config/airflow.cfg"
   volumes:
@@ -87,7 +85,7 @@ x-airflow-common: &airflow-common
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:13
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -119,7 +117,7 @@ services:
     <<: *airflow-common
     command: api-server
     ports:
-      - "8080:8080"
+      - "8082:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
       interval: 30s
@@ -299,7 +297,7 @@ services:
       _AIRFLOW_WWW_USER_CREATE: "true"
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
-      _PIP_ADDITIONAL_REQUIREMENTS: "kafka-python requests"
+      _PIP_ADDITIONAL_REQUIREMENTS: ""
     user: "0:0"
 
   airflow-cli:
@@ -338,71 +336,24 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-  kafka:
-    image: wurstmeister/kafka
-    container_name: kafka_exo_bce
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper_bce:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_exo_bce:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_LOG_RETENTION_BYTES: 1073741824
-    depends_on:
-      - zookeeper
-    networks:
-      - hadoop-network
-      - spark-network
-
-  zookeeper:
-    image: wurstmeister/zookeeper
-    container_name: zookeeper_bce
-    ports:
-      - "2181:2181"
-    networks:
-      - hadoop-network
-      - spark-network
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui
-    container_name: kafka-ui_exo_bce
-    ports:
-      - "8092:8080"
-    restart: always
-    environment:
-      - KAFKA_CLUSTERS_0_NAME=MOAA-Stats
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka_exo_bce:9092
-      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper_bce:2181
-    depends_on:
-      - kafka
-    networks:
-      - hadoop-network
-      - spark-network
-
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
-    container_name: namenode_exo_bce
+    container_name: namenode_bce
     restart: always
     ports:
       - 9870:9870
       - 9000:9000
     volumes:
       - hadoop_namenode:/hadoop/dfs/name
-      - ../hadoop/myhadoop:/myhadoop
+      - ./myhadoop:/myhadoop
     environment:
       - CLUSTER_NAME=test
     env_file:
       - ./hadoop.env
-    networks:
-      - hadoop-network
-      - spark-network
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
-    container_name: datanode_exo_bce
+    container_name: datanode_bce
     restart: always
     volumes:
       - hadoop_datanode:/hadoop/dfs/data
@@ -410,37 +361,28 @@ services:
       SERVICE_PRECONDITION: "namenode:9870"
     env_file:
       - ./hadoop.env
-    networks:
-      - hadoop-network
-      - spark-network
 
   resourcemanager:
     image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
-    container_name: resourcemanager_exo_bce
+    container_name: resourcemanager_bce
     restart: always
     environment:
       SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
     env_file:
       - ./hadoop.env
-    networks:
-      - hadoop-network
-      - spark-network
 
   nodemanager1:
     image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
-    container_name: nodemanager_exo_bce
+    container_name: nodemanager_bce
     restart: always
     environment:
       SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
     env_file:
       - ./hadoop.env
-    networks:
-      - hadoop-network
-      - spark-network
 
   historyserver:
     image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
-    container_name: historyserver_exo_bce
+    container_name: historyserver_bce
     restart: always
     environment:
       SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
@@ -452,15 +394,26 @@ services:
   spark-master:
     image: bde2020/spark-master:3.0.1-hadoop3.2
     ports:
-      - "8081:8080"
+      - "8080:8080"
       - "7077:7077"
     volumes:
       - ./work:/home/jovyan/work
     environment:
       - "SPARK_LOCAL_IP=spark-master"
-    networks:
-      - hadoop-network
-      - spark-network
+
+  spark-worker:
+    image: bde2020/spark-worker:3.0.1-hadoop3.2
+
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=4G
+      - SPARK_DRIVER_MEMORY=3G
+      - SPARK_EXECUTOR_MEMORY=3G
+    volumes:
+      - ./work:/home/jovyan/work
 
   neo4j:
     image: neo4j:5
@@ -476,7 +429,6 @@ services:
       - neo4j_logs:/logs
       - neo4j_import:/import
       - neo4j_plugins:/plugins
-
 volumes:
   postgres-db-volume:
   hadoop_namenode:
@@ -488,8 +440,6 @@ volumes:
   neo4j_plugins:
 
 networks:
-  hadoop-network:
-  spark-network:
   default:
     external:
       name: airflow
