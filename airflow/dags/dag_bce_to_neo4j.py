@@ -15,12 +15,12 @@ from bce_utils.bce_neo4j_loader import BCENeo4jLoader
 # Configuration
 HDFS_URL = 'http://namenode_exo_bce:9870'
 HDFS_USER = 'root'
-HDFS_BASE_PATH = '../data'  # Chemin de base dans HDFS où sont les dossiers d'entreprises
+HDFS_BASE_PATH = '/bce_data'  # Chemin de base dans HDFS où sont les dossiers d'entreprises
 NEO4J_URI = 'bolt://neo4j:7687'
 NEO4J_USER = 'neo4j'
 NEO4J_PASSWORD = 'password'
-TEMP_JSON_DIR = '..data/bce_temp_json'
-PROCESSED_FILES_PATH = '../data/bce_processed_files.txt'
+TEMP_JSON_DIR = '/opt/airflow/data/bce_temp_json'
+PROCESSED_FILES_PATH = '/opt/airflow/data/bce_processed_files.txt'
 
 default_args = {
     'owner': 'airflow',
@@ -48,6 +48,7 @@ def get_new_html_files(**context):
     """
     Récupère la liste des nouveaux fichiers HTML depuis HDFS
     (fichiers non encore traités)
+    Fichiers au format: /data/{numero_entreprise}.htm
     """
     from hdfs import InsecureClient
     
@@ -58,32 +59,22 @@ def get_new_html_files(**context):
     processed_files = get_processed_files()
     logger.info(f"Nombre de fichiers déjà traités: {len(processed_files)}")
     
-    # Parcourir les dossiers d'entreprises dans HDFS
+    # Lister tous les fichiers HTML directement dans HDFS_BASE_PATH
     new_files = []
     
     try:
-        # Lister tous les dossiers dans HDFS_BASE_PATH
-        company_dirs = hdfs_client.list(HDFS_BASE_PATH)
+        # Lister tous les fichiers dans le répertoire de base
+        all_items = hdfs_client.list(HDFS_BASE_PATH)
         
-        for company_dir in company_dirs:
-            company_path = f"{HDFS_BASE_PATH}/{company_dir}"
-            
-            # Vérifier si c'est un dossier (numéro d'entreprise)
-            try:
-                files_in_dir = hdfs_client.list(company_path)
+        for item in all_items:
+            # Vérifier si c'est un fichier HTML
+            if item.endswith('.htm') or item.endswith('.html'):
+                full_path = f"{HDFS_BASE_PATH}/{item}"
                 
-                # Chercher les fichiers HTML
-                for file in files_in_dir:
-                    if file.endswith('.htm') or file.endswith('.html'):
-                        full_path = f"{company_path}/{file}"
-                        
-                        # Vérifier si le fichier n'a pas déjà été traité
-                        if full_path not in processed_files:
-                            new_files.append(full_path)
-                            logger.info(f"Nouveau fichier trouvé: {full_path}")
-            except Exception as e:
-                logger.warning(f"Erreur lors de la lecture de {company_path}: {e}")
-                continue
+                # Vérifier si le fichier n'a pas déjà été traité
+                if full_path not in processed_files:
+                    new_files.append(full_path)
+                    logger.info(f"Nouveau fichier trouvé: {full_path}")
         
         logger.info(f"Nombre de nouveaux fichiers à traiter: {len(new_files)}")
         
@@ -214,7 +205,7 @@ with DAG(
     'dag_bce_to_neo4j',
     default_args=default_args,
     description='Pipeline d\'extraction BCE depuis HDFS vers Neo4j',
-    schedule_interval=None,  # Sera déclenché par un autre DAG
+    schedule=None,  # Sera déclenché par un autre DAG
     catchup=False,
     tags=['bce', 'neo4j', 'hdfs', 'extraction'],
 ) as dag:
@@ -232,26 +223,22 @@ with DAG(
     get_files_task = PythonOperator(
         task_id='get_new_files',
         python_callable=get_new_html_files,
-        provide_context=True,
     )
-    
+
     extract_task = PythonOperator(
         task_id='extract_data',
         python_callable=extract_bce_data,
-        provide_context=True,
     )
-    
+
     load_task = PythonOperator(
         task_id='load_to_neo4j',
         python_callable=load_to_neo4j,
-        provide_context=True,
     )
-    
+
     cleanup_task = PythonOperator(
         task_id='cleanup_temp_files',
         python_callable=cleanup_temp_files,
-        provide_context=True,
-        trigger_rule='all_done',  # S'exécute toujours, même en cas d'échec
+        trigger_rule='all_done',
     )
     
     # Définir l'ordre d'exécution
