@@ -17,7 +17,7 @@ from bce_utils.token import TokenService
 # CONFIGURATION
 REDIS_HOST = "redis"
 REDIS_PORT = 6379
-NAMENODE_URL = "http://namenode_exo_bce:9870"
+NAMENODE_URL = "http://namenode_bce:9870"
 BCE_BASE_URL = "https://kbopub.economie.fgov.be"
 SAMPLE_SIZE = 20  # Nombre d'entreprises à sélectionner aléatoirement
 
@@ -25,7 +25,7 @@ SAMPLE_SIZE = 20  # Nombre d'entreprises à sélectionner aléatoirement
 @dag(
     dag_id="dag_start",
     start_date=pendulum.datetime(2024, 1, 1, tz="UTC"),
-    schedule=None,
+    schedule="*/10 * * * *",  # se lancer toutes les 10 minutes
     catchup=False,
     tags=["exemple", "orchestrateur", "parallelisme"],
 )
@@ -48,138 +48,6 @@ def dag_start():
             f"🎲 {len(selected)} entreprises sélectionnées aléatoirement sur {len(rows)}"
         )
         return selected
-
-    @task()
-    def get_entreprises_list():
-        """Retourne la liste des entreprises à scraper"""
-        entreprises = [
-            {
-                "entity_number": "0475.960.588",
-                "denomination": "RUDI ZEELMAEKERS, BEDRIJFSREVISOR",
-            },
-            {"entity_number": "0475.960.687", "denomination": "VOLLEY CLUB MARCHOIS"},
-            {"entity_number": "0475.961.776", "denomination": "Rent-a-Priest - Emmaüs"},
-            {
-                "entity_number": "0200.065.765",
-                "denomination": "Intergemeentelijke Vereniging Veneco",
-            },
-            {"entity_number": "0200.065.765", "denomination": "Veneco"},
-            {"entity_number": "0200.068.636", "denomination": "Farys"},
-            {
-                "entity_number": "0200.171.970",
-                "denomination": "Sanatorium-Hospitaal van Lemberge",
-            },
-            {
-                "entity_number": "0200.245.711",
-                "denomination": "Intercommunaal Sanatorium Denderoord",
-            },
-            {"entity_number": "0200.245.711", "denomination": "DENDEROORD"},
-            {
-                "entity_number": "0200.305.493",
-                "denomination": "Intergemeentelijk Samenwerkingsverband voor ruimtelijke ordening en socio-economische expansie",
-            },
-            {"entity_number": "0200.305.493", "denomination": "SOLVA"},
-            {
-                "entity_number": "0200.362.210",
-                "denomination": "in BW Association Intercommunale",
-            },
-            {"entity_number": "0200.362.210", "denomination": "in B.W."},
-            {
-                "entity_number": "0200.362.408",
-                "denomination": "Intercommunale Sociale du Brabant wallon",
-            },
-            {"entity_number": "0200.362.408", "denomination": "I.S.B.W."},
-            {
-                "entity_number": "0200.420.410",
-                "denomination": "Congregatie der Gasthuiszusters-Augustinessen van Diest",
-            },
-            {
-                "entity_number": "0200.420.608",
-                "denomination": "Congregatie der Gasthuiszusters van Poperinge",
-            },
-            {
-                "entity_number": "0200.448.421",
-                "denomination": "Liefdadige Congregatie der Gasthuiszusters",
-            },
-            {
-                "entity_number": "0200.450.005",
-                "denomination": "Liefdadige Congregatie der Zwarte Zusters van Brugge, Oostende en Menen (VL - Brugge)",
-            },
-            {"entity_number": "0200.762.878", "denomination": "VLOTTER"},
-            {
-                "entity_number": "0200.881.951",
-                "denomination": "Intercommunale Maatschappij voor de Ruimtelijke Ordening en de Economisch- Sociale Expansie van het Arrondissement Halle-Vilvoorde",
-            },
-            {"entity_number": "0200.881.951", "denomination": "HAVILAND"},
-            {
-                "entity_number": "0200.882.050",
-                "denomination": "Intercommunale maatschappij voor de Sanering van het Dal der Molenbeek en Pontbeek",
-            },
-            {
-                "entity_number": "0200.882.050",
-                "denomination": "VALLEE MOLENBEEK PONTBEEK DAL",
-            },
-            {"entity_number": "0201.105.843", "denomination": "I.D.E.A. S.C"},
-            {"entity_number": "0201.105.843", "denomination": "I.D.E.A."},
-            {
-                "entity_number": "0201.107.526",
-                "denomination": "ASSOCIATION INTERCOMMUNALE DU BOIS D'HAVRE",
-            },
-            {"entity_number": "0201.107.526", "denomination": "I.B.H."},
-            {
-                "entity_number": "0201.183.146",
-                "denomination": "Société Intercommunale de l'Electricité de la Dendre et du Canton de Lens",
-            },
-            {"entity_number": "0201.183.146", "denomination": "I.D.E.L."},
-            {
-                "entity_number": "0201.310.731",
-                "denomination": "NOORDLIMBURGSE MAATSCHAPPIJ VOOR DE OPRICHTING VAN EEN INDUSTRIEPARK IN NOORD-LIMBURG",
-            },
-            {"entity_number": "0201.310.731", "denomination": "NOLIMPARK"},
-            {"entity_number": "0201.310.929", "denomination": "IGL"},
-            {"entity_number": "0201.310.929", "denomination": "IGL"},
-            {
-                "entity_number": "0201.311.028",
-                "denomination": "Intercommunale Maatschappij voor Ruimtelijke Ontwikkeling in Limburg",
-            },
-            {"entity_number": "0201.311.028", "denomination": "I.M.L."},
-            {"entity_number": "0201.311.226", "denomination": "FLUVIUS"},
-            {
-                "entity_number": "0201.339.039",
-                "denomination": "Provinciale Limburgse Intercommunale Gasmaatschappij",
-            },
-            {"entity_number": "0201.339.039", "denomination": "Pli Gas"},
-            {
-                "entity_number": "0201.400.011",
-                "denomination": "SOCIETE INTERCOMMUNALE BEP - EXPANSION ECONOMIQUE",
-            },
-            {
-                "entity_number": "0201.400.110",
-                "denomination": "Association Intercommunale des Eaux du Condroz",
-            },
-            {"entity_number": "0201.400.110", "denomination": "A.I.E.C."},
-            {
-                "entity_number": "0201.400.209",
-                "denomination": "Société intercommunale BEP-Environnement",
-            },
-            {
-                "entity_number": "0201.456.924",
-                "denomination": "Intercommunale de distribution d'Eau de Tihange et environs",
-            },
-            {"entity_number": "0201.456.924", "denomination": "TIHANGE"},
-            {"entity_number": "0201.543.234", "denomination": "TIBI"},
-            {
-                "entity_number": "0201.552.538",
-                "denomination": "Oeuvres Sociales Intercommunale",
-            },
-            {
-                "entity_number": "0201.568.473",
-                "denomination": "Union intercommunale pour l'Exécution des Travaux de Voutement et d'Amélioration des Ruisseaux de Lodelinsart",
-            },
-            {"entity_number": "0201.645.281", "denomination": "CENEO"},
-        ]
-        print(f"📋 {len(entreprises)} entreprises à scraper")
-        return entreprises
 
     @task()
     def get_valid_proxies():
@@ -312,7 +180,6 @@ def dag_start():
     entreprises = load_entreprises()
     proxy_data = get_valid_proxies()
     proxy_list = extract_proxy_list(proxy_data)
-    entreprises_list = get_entreprises_list()
 
     # Créer les paires 1:1 (proxy, entreprise)
     pairs = create_proxy_entreprise_pairs(proxy_list, entreprises)
