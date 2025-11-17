@@ -34,6 +34,7 @@ def dag_exemple_scrappring():
         proxy_recu = dag_run_conf.get('proxy')
         entity_number = dag_run_conf.get('entity_number')
         denomination = dag_run_conf.get('denomination', 'N/A')
+        token = dag_run_conf.get('token')
         
         print(f"🏢 Scraping entreprise: {entity_number} - {denomination}")
         print(f"🌐 Proxy assigné: {proxy_recu}")
@@ -99,6 +100,35 @@ def dag_exemple_scrappring():
 
                 print(f"✅ Entreprise {entity_number} scrapée avec succès")
 
+                # Déclencher le DAG Neo4j pour traiter ce fichier
+                try:
+                    neo4j_dag_id = 'dag_bce_to_neo4j'
+                    api_url = f"http://airflow-apiserver:8080/api/v2/dags/{neo4j_dag_id}/dagRuns"
+                    
+                    neo4j_payload = {
+                        "dag_run_id": f"neo4j_{entity_number.replace('.', '_')}_{int(time.time())}",
+                        "logical_date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "conf": {
+                            "entity_number": entity_number,
+                            "hdfs_path": hdfs_path
+                        }
+                    }
+                    
+                    neo4j_response = requests.post(
+                        api_url,
+                        json=neo4j_payload,
+                        headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'},
+                        timeout=10
+                    )
+                    
+                    if neo4j_response.status_code in [200, 201]:
+                        print(f"✅ DAG Neo4j déclenché pour {entity_number}")
+                    else:
+                        print(f"⚠️ Erreur déclenchement Neo4j: {neo4j_response.text}")
+                        
+                except Exception as e:
+                    print(f"⚠️ Erreur lors du déclenchement Neo4j (non-bloquant): {e}")
+                
                 return {
                     "status": "success",
                     "entity_number": entity_number,
