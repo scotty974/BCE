@@ -20,8 +20,8 @@ BCE_BASE_URL = "https://kbopub.economie.fgov.be"
 )
 def dag_scraping_html():
     entreprises_test = [
-        {"entity_number": "0200.362.408", "denomination": "Test Company 1"},
-        {"entity_number": "0200.420.410", "denomination": "Test Company 2"},
+        {"entity_number": "0475.960.588", "denomination": "Test Company 1"},
+        {"entity_number": "0475.960.687", "denomination": "Test Company 2"},
     ]
 
     @task()
