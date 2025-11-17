@@ -3,49 +3,48 @@ DAG Worker : Scraping d'entreprises BCE
 Ce DAG est triggered N fois en parallèle par l'orchestrateur
 """
 
-from airflow.decorators import dag, task
-import pendulum
 import time
+
+import pendulum
 import requests
-from hdfs import InsecureClient
+from airflow.decorators import dag, task
 from bce_utils.proxy import ProxyService
+from hdfs import InsecureClient
 
 REDIS_HOST = "redis"
 REDIS_PORT = 6379
 NAMENODE_URL = "http://namenode_bce:9870"
 BCE_BASE_URL = "https://kbopub.economie.fgov.be"
 
+
 @dag(
-    dag_id='dag_exemple_scrappring',
+    dag_id="dag_exemple_scrappring",
     start_date=pendulum.datetime(2024, 1, 1, tz="UTC"),
     schedule=None,  # Triggered par l'orchestrateur
     catchup=False,
-    tags=['exemple', 'worker', 'scrappring']
+    tags=["exemple", "worker", "scrappring"],
     # Note: max_active_runs se configure dans airflow.cfg ou docker-compose.yaml
 )
 def dag_exemple_scrappring():
-
     @task()
     def scrape_entreprise(**context):
         """Scrape une entreprise en utilisant le proxy assigné"""
         # Récupérer les paramètres depuis la configuration du DAG run
-        dag_run_conf = context.get('dag_run').conf
-        
-        proxy_recu = dag_run_conf.get('proxy')
-        entity_number = dag_run_conf.get('entity_number')
-        denomination = dag_run_conf.get('denomination', 'N/A')
-        token = dag_run_conf.get('token')
-        
-        print(f"🏢 Scraping entreprise: {entity_number} - {denomination}")
+        dag_run_conf = context.get("dag_run").conf
+
+        proxy_recu = dag_run_conf.get("proxy")
+        entity_number = dag_run_conf.get("entity_number")
+        token = dag_run_conf.get("token")
+
         print(f"🌐 Proxy assigné: {proxy_recu}")
-        
+
         # Créer une nouvelle instance pour cette tâche
         proxy_service = ProxyService(redis_host=REDIS_HOST, redis_port=REDIS_PORT)
         client = InsecureClient(NAMENODE_URL, user="root")
 
         # Nombre réduit de tentatives car on utilise un seul proxy
         max_retries = 10
-        
+
         # Vérifier qu'on a bien reçu un proxy
         if not proxy_recu:
             print("❌ Aucun proxy assigné")
@@ -56,7 +55,7 @@ def dag_exemple_scrappring():
             }
 
         print(f"🔄 Max tentatives: {max_retries} (avec le proxy assigné uniquement)")
-        
+
         for attempt in range(max_retries):
             try:
                 print(f"🔄 Tentative {attempt + 1}/{max_retries}")
@@ -76,7 +75,7 @@ def dag_exemple_scrappring():
                     headers={"User-Agent": "Mozilla/5.0"},
                 )
                 print(f"📡 Status code: {response.status_code}")
-                
+
                 # Gérer 404 - Ne pas stocker, mais ce n'est pas une erreur du proxy
                 if response.status_code == 404:
                     print(f"⚠️ Entreprise {entity_number} non trouvée (404)")
@@ -102,33 +101,38 @@ def dag_exemple_scrappring():
 
                 # Déclencher le DAG Neo4j pour traiter ce fichier
                 try:
-                    neo4j_dag_id = 'dag_bce_to_neo4j'
+                    neo4j_dag_id = "dag_bce_to_neo4j"
                     api_url = f"http://airflow-apiserver:8080/api/v2/dags/{neo4j_dag_id}/dagRuns"
-                    
+
                     neo4j_payload = {
                         "dag_run_id": f"neo4j_{entity_number.replace('.', '_')}_{int(time.time())}",
-                        "logical_date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "logical_date": time.strftime(
+                            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+                        ),
                         "conf": {
                             "entity_number": entity_number,
-                            "hdfs_path": hdfs_path
-                        }
+                            "hdfs_path": hdfs_path,
+                        },
                     }
-                    
+
                     neo4j_response = requests.post(
                         api_url,
                         json=neo4j_payload,
-                        headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'},
-                        timeout=10
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {token}",
+                        },
+                        timeout=10,
                     )
-                    
+
                     if neo4j_response.status_code in [200, 201]:
                         print(f"✅ DAG Neo4j déclenché pour {entity_number}")
                     else:
                         print(f"⚠️ Erreur déclenchement Neo4j: {neo4j_response.text}")
-                        
+
                 except Exception as e:
                     print(f"⚠️ Erreur lors du déclenchement Neo4j (non-bloquant): {e}")
-                
+
                 return {
                     "status": "success",
                     "entity_number": entity_number,
@@ -152,6 +156,7 @@ def dag_exemple_scrappring():
             except Exception as e:
                 print(f"❌ Erreur inattendue: {e}")
                 import traceback
+
                 traceback.print_exc()
                 return {
                     "status": "failed",
@@ -159,17 +164,16 @@ def dag_exemple_scrappring():
                     "entity_number": entity_number,
                     "proxy_used": proxy_recu,
                 }
-                
+
         return {
             "status": "failed",
             "reason": "Échec après toutes les tentatives",
             "entity_number": entity_number,
             "proxy_used": proxy_recu,
         }
-    
+
     # Appeler la tâche
     scrape_entreprise()
-
 
 
 # Instancier le DAG
