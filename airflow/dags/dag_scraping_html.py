@@ -86,7 +86,6 @@ def dag_scraping_html():
             }
 
         print(f"max_retries: {max_retries}")
-        client.makedirs("/hdfs-html-page/")
         for attempt in range(max_retries):
             try:
                 print(f"🔄 Tentative {attempt + 1}/{max_retries}")
@@ -108,6 +107,11 @@ def dag_scraping_html():
 
                 # Marquer le proxy comme utilisé
                 proxy_service.mark_used(proxy)
+
+                try:
+                    client.makedirs("/hdfs-html-page/")
+                except Exception:
+                    pass
 
                 # Construire l'URL
                 transformed_entity_number = entity_number.replace(".", "")
@@ -147,7 +151,6 @@ def dag_scraping_html():
                     "entity_number": entity_number,
                     "proxy_used": proxy,
                 }
-
             except requests.exceptions.RequestException as e:
                 print(f"❌ Erreur requête (tentative {attempt + 1}): {e}")
 
