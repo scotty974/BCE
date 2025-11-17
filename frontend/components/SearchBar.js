@@ -122,62 +122,63 @@ export default function SearchBar() {
     }
   }
 
-  const pollScrapingStatus = async (dagRunId, entityNumber) => {
-    const maxAttempts = 30 // 5 minutes max (30 * 10s)
-    let attempts = 0
-    
-    const checkStatus = async () => {
-      try {
-        const response = await fetch(`/api/scrape/status/${dagRunId}`)
-        const data = await response.json()
+    const pollScrapingStatus = async (dagRunId, entityNumber) => {
+        const maxAttempts = 60 // 10 minutes max (60 * 10s)
+        let attempts = 0
         
-        if (data.state === 'success') {
-          setScrapeMessage({
-            type: 'success',
-            text: `✅ Scraping terminé ! L'entreprise ${entityNumber} est maintenant disponible.`
-          })
-          
-          // Rafraîchir la recherche
-          setTimeout(() => {
-            setSearch(entityNumber)
-          }, 2000)
-          
-          return true
-        } else if (data.state === 'failed') {
-          setScrapeMessage({
-            type: 'error',
-            text: `❌ Le scraping a échoué. L'entreprise n'a peut-être pas été trouvée.`
-          })
-          return true
-        } else if (data.state === 'running' || data.state === 'queued') {
-          setScrapeMessage({
-            type: 'info',
-            text: `⏳ Scraping en cours... (${data.state})`
-          })
+        const checkStatus = async () => {
+            try {
+            const response = await fetch(`/api/scrape/status/${dagRunId}`)
+            const data = await response.json()
+            
+            if (data.state === 'success') {
+                setScrapeMessage({
+                type: 'success',
+                text: `✅ Scraping terminé ! Redirection vers l'entreprise...`
+                })
+                
+                // Rediriger après 2 secondes
+                setTimeout(() => {
+                const cleanedNumero = cleanNumero(entityNumber)
+                router.push(`/entreprise/${cleanedNumero}`)
+                }, 2000)
+                
+                return true
+            } else if (data.state === 'failed') {
+                setScrapeMessage({
+                type: 'error',
+                text: `❌ Le scraping a échoué. L'entreprise n'a peut-être pas été trouvée.`
+                })
+                return true
+            } else if (data.state === 'running' || data.state === 'queued') {
+                setScrapeMessage({
+                type: 'info',
+                text: `⏳ Scraping en cours... (${data.state})`
+                })
+            }
+            
+            return false
+            } catch (error) {
+            console.error('Erreur vérification statut:', error)
+            return false
+            }
         }
         
-        return false
-      } catch (error) {
-        console.error('Erreur vérification statut:', error)
-        return false
-      }
+        const interval = setInterval(async () => {
+            attempts++
+            const finished = await checkStatus()
+            
+            if (finished || attempts >= maxAttempts) {
+            clearInterval(interval)
+            if (attempts >= maxAttempts && !finished) {
+                setScrapeMessage({
+                type: 'warning',
+                text: `⏱️ Le scraping prend plus de temps que prévu. Vous pouvez rafraîchir la page dans quelques minutes.`
+                })
+            }
+            }
+        }, 10000) // Vérifier toutes les 10 secondes
     }
-    
-    const interval = setInterval(async () => {
-      attempts++
-      const finished = await checkStatus()
-      
-      if (finished || attempts >= maxAttempts) {
-        clearInterval(interval)
-        if (attempts >= maxAttempts) {
-          setScrapeMessage({
-            type: 'warning',
-            text: `⏱️ Le scraping prend plus de temps que prévu. Vérifiez dans quelques minutes.`
-          })
-        }
-      }
-    }, 10000) // Vérifier toutes les 10 secondes
-  }
 
   return (
     <div>

@@ -1,31 +1,33 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import EntrepriseDetails from '@/components/EntrepriseDetails'
+import RescrapeButton from '@/components/RescrapeButton'
 
 // Fonction pour extraire uniquement le numéro d'entreprise
-function extractNumero(rawNumero) {
-  // Extraire le premier pattern qui ressemble à un numéro d'entreprise
-  // Format: 0XXX.XXX.XXX ou 0XXXXXXXXX
-  const match = rawNumero.match(/0\d{3}[\.\s]?\d{3}[\.\s]?\d{3}/)
+function extractNumero(segments) {
+  const fullPath = Array.isArray(segments) ? segments.join('/') : segments
+  const match = fullPath.match(/0\d{3}[\.\s]?\d{3}[\.\s]?\d{3}/)
   if (match) {
-    return match[0]
+    return match[0].replace(/\s/g, '')
   }
-  // Si pas de match, retourner tel quel
-  return rawNumero
+  return Array.isArray(segments) ? segments[0] : segments || ''
 }
 
 export default function EntreprisePage({ params }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const searchParams = useSearchParams()
+  const showScrapedMessage = searchParams.get('scraped') === 'true'
 
-  // Nettoyer le numéro
-  const cleanNumero = extractNumero(decodeURIComponent(params.numero))
+  const cleanNumero = extractNumero(params.numero)
 
   useEffect(() => {
     async function fetchData() {
       try {
+        console.log('Fetching entreprise:', cleanNumero)
         const res = await fetch(`/api/entreprises/${encodeURIComponent(cleanNumero)}`)
         
         if (!res.ok) {
@@ -97,5 +99,49 @@ export default function EntreprisePage({ params }) {
     )
   }
 
-  return <EntrepriseDetails data={data} />
+  return (
+    <div className="container" style={{ paddingTop: '40px' }}>
+      <a
+        href="/"
+        style={{
+          display: 'inline-block',
+          marginBottom: '20px',
+          color: '#2563eb',
+          textDecoration: 'none',
+          fontWeight: '500'
+        }}
+      >
+        ← Retour à la recherche
+      </a>
+
+      {/* Message de succès du scraping initial */}
+      {showScrapedMessage && (
+        <div style={{
+          background: '#dcfce7',
+          border: '2px solid #86efac',
+          borderRadius: '8px',
+          padding: '16px 20px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px'
+        }}>
+          <span style={{ fontSize: '24px' }}>🎉</span>
+          <div>
+            <div style={{ fontWeight: '600', color: '#166534', marginBottom: '4px' }}>
+              Scraping réussi !
+            </div>
+            <div style={{ fontSize: '14px', color: '#15803d' }}>
+              L'entreprise {cleanNumero} a été ajoutée avec succès à la base de données.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bouton de re-scraping */}
+      <RescrapeButton entityNumber={cleanNumero} />
+      
+      <EntrepriseDetails data={data} />
+    </div>
+  )
 }
