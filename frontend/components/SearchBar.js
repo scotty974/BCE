@@ -5,19 +5,25 @@ import { useRouter } from 'next/navigation'
 
 // Fonction pour extraire et nettoyer le numéro
 function cleanNumero(text) {
-  // Extraire le premier pattern qui ressemble à un numéro d'entreprise
   const match = text.match(/0\d{3}[\.\s]?\d{3}[\.\s]?\d{3}/)
   if (match) {
-    // Retourner sans les espaces mais garder les points
     return match[0].replace(/\s/g, '')
   }
   return text
+}
+
+// Fonction pour valider qu'une chaîne est un numéro d'entreprise complet
+function isValidEntityNumber(text) {
+  const clean = text.replace(/[\.\s]/g, '')
+  return /^0\d{9}$/.test(clean)
 }
 
 export default function SearchBar() {
   const [search, setSearch] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
+  const [scraping, setScraping] = useState(false)
+  const [scrapeMessage, setScrapeMessage] = useState(null)
   const router = useRouter()
 
   // Recherche automatique quand on tape (debounce)
@@ -57,10 +63,120 @@ export default function SearchBar() {
   }
 
   const handleEntrepriseClick = (numero) => {
-    // Nettoyer le numéro avant la navigation
     const cleanedNumero = cleanNumero(numero)
     console.log('Navigation vers:', cleanedNumero)
     router.push(`/entreprise/${cleanedNumero}`)
+  }
+
+  const handleScrape = async () => {
+    const entityNumber = cleanNumero(search)
+    
+    if (!isValidEntityNumber(entityNumber)) {
+      setScrapeMessage({
+        type: 'error',
+        text: 'Veuillez entrer un numéro d\'entreprise valide (ex: 0203.430.576)'
+      })
+      return
+    }
+    
+    setScraping(true)
+    setScrapeMessage({
+      type: 'info',
+      text: 'Démarrage du scraping...'
+    })
+    
+    try {
+      const response = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ entity_number: entityNumber })
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        setScrapeMessage({
+          type: 'success',
+          text: `Scraping lancé ! L'entreprise ${entityNumber} sera disponible dans quelques minutes.`,
+          dagRunId: data.dag_run_id
+        })
+        
+        // Optionnel : polling pour vérifier le statut
+        pollScrapingStatus(data.dag_run_id, entityNumber)
+      } else {
+        setScrapeMessage({
+          type: 'error',
+          text: data.error || 'Erreur lors du lancement du scraping'
+        })
+      }
+    } catch (error) {
+      console.error('Erreur scraping:', error)
+      setScrapeMessage({
+        type: 'error',
+        text: 'Erreur de connexion au serveur'
+      })
+    } finally {
+      setScraping(false)
+    }
+  }
+
+  const pollScrapingStatus = async (dagRunId, entityNumber) => {
+    const maxAttempts = 30 // 5 minutes max (30 * 10s)
+    let attempts = 0
+    
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`/api/scrape/status/${dagRunId}`)
+        const data = await response.json()
+        
+        if (data.state === 'success') {
+          setScrapeMessage({
+            type: 'success',
+            text: `✅ Scraping terminé ! L'entreprise ${entityNumber} est maintenant disponible.`
+          })
+          
+          // Rafraîchir la recherche
+          setTimeout(() => {
+            setSearch(entityNumber)
+          }, 2000)
+          
+          return true
+        } else if (data.state === 'failed') {
+          setScrapeMessage({
+            type: 'error',
+            text: `❌ Le scraping a échoué. L'entreprise n'a peut-être pas été trouvée.`
+          })
+          return true
+        } else if (data.state === 'running' || data.state === 'queued') {
+          setScrapeMessage({
+            type: 'info',
+            text: `⏳ Scraping en cours... (${data.state})`
+          })
+        }
+        
+        return false
+      } catch (error) {
+        console.error('Erreur vérification statut:', error)
+        return false
+      }
+    }
+    
+    const interval = setInterval(async () => {
+      attempts++
+      const finished = await checkStatus()
+      
+      if (finished || attempts >= maxAttempts) {
+        clearInterval(interval)
+        if (attempts >= maxAttempts) {
+          setScrapeMessage({
+            type: 'warning',
+            text: `⏱️ Le scraping prend plus de temps que prévu. Vérifiez dans quelques minutes.`
+          })
+        }
+      }
+    }, 10000) // Vérifier toutes les 10 secondes
   }
 
   return (
@@ -105,6 +221,26 @@ export default function SearchBar() {
           </button>
         </div>
       </form>
+
+      {/* Message de scraping */}
+      {scrapeMessage && (
+        <div style={{
+          padding: '16px',
+          borderRadius: '6px',
+          marginBottom: '20px',
+          background: scrapeMessage.type === 'success' ? '#dcfce7' : 
+                     scrapeMessage.type === 'error' ? '#fee2e2' :
+                     scrapeMessage.type === 'warning' ? '#fef3c7' : '#dbeafe',
+          color: scrapeMessage.type === 'success' ? '#166534' :
+                 scrapeMessage.type === 'error' ? '#991b1b' :
+                 scrapeMessage.type === 'warning' ? '#92400e' : '#1e40af',
+          border: `1px solid ${scrapeMessage.type === 'success' ? '#86efac' :
+                              scrapeMessage.type === 'error' ? '#fca5a5' :
+                              scrapeMessage.type === 'warning' ? '#fcd34d' : '#93c5fd'}`
+        }}>
+          {scrapeMessage.text}
+        </div>
+      )}
 
       {loading && (
         <div style={{
@@ -170,7 +306,43 @@ export default function SearchBar() {
         </div>
       )}
 
-      {!loading && results.length === 0 && search && (
+      {!loading && results.length === 0 && search && isValidEntityNumber(search) && (
+        <div style={{
+          background: 'white',
+          padding: '24px',
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '16px', color: '#6b7280', marginBottom: '16px' }}>
+            Aucun résultat trouvé pour "{search}"
+          </div>
+          <div style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '20px' }}>
+            Cette entreprise n'est pas encore dans notre base de données.
+          </div>
+          <button
+            onClick={handleScrape}
+            disabled={scraping}
+            style={{
+              padding: '12px 24px',
+              background: scraping ? '#9ca3af' : '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: scraping ? 'not-allowed' : 'pointer',
+              transition: 'background 0.2s'
+            }}
+            onMouseEnter={(e) => !scraping && (e.target.style.background = '#059669')}
+            onMouseLeave={(e) => !scraping && (e.target.style.background = '#10b981')}
+          >
+            {scraping ? '🔄 Scraping en cours...' : '🔍 Scraper cette entreprise'}
+          </button>
+        </div>
+      )}
+
+      {!loading && results.length === 0 && search && !isValidEntityNumber(search) && (
         <div style={{
           padding: '20px',
           textAlign: 'center',
